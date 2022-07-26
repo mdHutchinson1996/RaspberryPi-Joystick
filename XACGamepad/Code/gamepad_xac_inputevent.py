@@ -52,11 +52,11 @@ class RIGHT_BUTTON(IntEnum):
     X2 = 7
     
 class JOYSTICK_XY(IntEnum):
-    MinInputValue = -15
-    MaxInputValue = 15
+    MinInputValue = -16
+    MaxInputValue = 16
     MinOutputValue = -127
     MaxOutputValue = 127
-    DeadZoneValue = 5
+    DeadZoneValue = 1
     OperationMode = 0  # 0: Don't Keep position after each mice move, 1: Keep position after each mice move
     ReactionTimeValue = 0.01  #10 ms
 
@@ -87,9 +87,13 @@ EVENT2ACTION = {
 async def handle_events(device):
     global mice_x_in
     global mice_y_in
+    global joystick_x_out
+    global joystick_y_out
     # Grab exclusive access means the shell and/or GUI no longer receives the input events
     with device.grab_context():
         async for event in device.async_read_loop():
+           # print(event.code)
+           # print(event.value)
             if event.code == evdev.ecodes.KEY_PAUSE:
                 sys.exit(0)
             if str(event.code) in EVENT2ACTION.get('BUTTONS'):
@@ -118,7 +122,7 @@ async def handle_events(device):
                     Joystick.yAxis(0)
             else:
                 """ Map mouse motion to thumbstick motion """
-                if event.code == evdev.ecodes.REL_X:
+                if event.code == evdev.ecodes.REL_X and event.value != 0:
                     if int(JOYSTICK_XY.OperationMode)==0:
                         mice_x_in = event.value
                     elif int(JOYSTICK_XY.OperationMode)==1:
@@ -147,13 +151,24 @@ async def handle_events(device):
                 elif event.code == evdev.ecodes.REL_HWHEEL:
                     if DEBUG_MODE: 
                         print('REL_HWHEEL', event.value)
-                elif event.code == evdev.ecodes.ABS_X:
+                elif event.code == evdev.ecodes.ABS_X and event.value != 0:
                     if DEBUG_MODE: 
                         print('ABS_X', event.value)
                 elif event.code == evdev.ecodes.ABS_Y:
                     if DEBUG_MODE: 
                         print('ABS_Y', event.value)
-            time.sleep(int(JOYSTICK_XY.ReactionTimeValue))
+                else:
+                    time.sleep(int(JOYSTICK_XY.ReactionTimeValue))
+                    info = device.read_one()
+                    if(info == None):
+                        print('Reset')
+                        if joystick_x_out != 0:
+                           Joystick.xAxis(0)
+                        if joystick_y_out != 0:
+                           Joystick.yAxis(0)
+                    else:
+                        device.write_event(info)
+           # time.sleep(int(JOYSTICK_XY.ReactionTimeValue))
                     
 def map_joystick(value, operation_value, deadzone_value, input_value_min, input_value_max, output_value_min, output_value_max):
     # Figure out the range 
@@ -163,8 +178,8 @@ def map_joystick(value, operation_value, deadzone_value, input_value_min, input_
     # Convert the input range into a 0 to 1 range (float value)   
     if (value>=-deadzone_value and value<=deadzone_value and operation_value==1):
         value_scaled = 0.5
-    elif (value>=input_value_min and value<=input_value_max and operation_value==0):
-        value_scaled = 0.5
+    #elif (value>=input_value_min and value<=input_value_max and operation_value==0):
+    #    value_scaled = 0.5
     elif (value<input_value_min and operation_value==1):
         value_scaled = 0.0
     elif (value>input_value_max and operation_value==1):
